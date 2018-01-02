@@ -81,15 +81,41 @@ abstract class AbstractGenerator implements GeneratorInterface
         return $this->directory.DIRECTORY_SEPARATOR.$relative.'.'.($extension ?: $this->fileExtension);
     }
 
-    protected abstract function buildEntry(Glossary $glossary, array $refs, Definition $def, Definition $last = null, Definition $next = null): string ;
+    protected abstract function buildEntry(
+        Glossary $glossary,
+        array $refs,
+        Definition $def,
+        Definition $last = null,
+        Definition $next = null
+    ): string;
+
+    /**
+     * @param Definition[] $definitions
+     * @return Definition[][]
+     */
+    protected function groupDefinitionsByLetter(array $definitions) {
+        return array_reduce(
+            $definitions,
+            function (array $group, Definition $definition) {
+                $letter = $definition->getLetter();
+                if (!isset($group[$letter])) {
+                    $group[$letter] = [$definition];
+                } else {
+                    $group[$letter][] = $definition;
+                }
+
+                return $group;
+            },
+            []
+        );
+    }
 
     /**
      * Copies images of a definition to the wiki.
      *
      * @param Definition $definition
      */
-    protected function copyImages(Definition $definition)
-    {
+    protected function copyImages(Definition $definition): void {
         $destDir = $this->directory.'/img/';
         if (!is_dir($destDir)) {
             mkdir($destDir, 0777, true);
@@ -97,5 +123,25 @@ abstract class AbstractGenerator implements GeneratorInterface
         foreach ($definition->getImages() as $image) {
             copy($image, $destDir.basename($image));
         }
+    }
+
+    /**
+     * Copies all images to the wiki.
+     */
+    protected function emptyImages(): void {
+        $dir = $this->directory.'/img/';
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $imageDir = opendir($dir);
+        while (false !== ($entry = readdir($imageDir))) {
+            if ('.' === $entry[0]) {
+                continue;
+            }
+
+            unlink($dir.$entry);
+        }
+        closedir($imageDir);
     }
 }

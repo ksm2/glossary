@@ -50,11 +50,14 @@ class WebsiteGenerator extends AbstractGenerator
         $this->deleteEntries($abandonedEntries);
 
         // Write the home page.
-        $this->writeIndexPage($glossary->getMeta('title'), $glossary->getDefinitions(), $glossary->getTags());
+        $groupedByLetter = $this->groupDefinitionsByLetter($glossary->getDefinitions());
+        $this->writeIndexPage($glossary->getMeta('title'), $groupedByLetter, $glossary->getTags());
+        foreach ($groupedByLetter as $letter => $definitions) {
+            $this->writeLetter($glossary, $letter, $definitions);
+        }
 
         // Write aggregated pages.
         $this->writeTagsPage($glossary->getTags());
-        $this->writeSidebar($glossary->getTags());
         $this->writeTags($glossary->getTaggedDefinitions());
     }
 
@@ -148,7 +151,6 @@ class WebsiteGenerator extends AbstractGenerator
 
         foreach ($def->getImages() as $image) {
             $body .= sprintf('![%s](img/%s)', basename($image, '.png'), basename($image));
-            $this->nl($body);
         }
 
         if (!empty($refs)) {
@@ -174,27 +176,44 @@ class WebsiteGenerator extends AbstractGenerator
      * Write the home site.
      *
      * @param string $title
-     * @param Definition[] $definitions
+     * @param Definition[][] $letters
      * @param string[] $tags
      */
-    private function writeIndexPage(string $title, array $definitions, array $tags) {
+    private function writeIndexPage(string $title, array $letters, array $tags) {
         $letter = null;
-        $open = false;
         $body = '';
-        foreach ($definitions as $definition) {
-            $thisLetter = preg_replace('/[^a-z]/', '#', $definition->getEscapedName()[0]);
-            if ($letter !== $thisLetter) {
-                $letter = $thisLetter;
-                if ($open) $body .= '</ul>';
-                $open = true;
-                $body .= '<h2>'.strtoupper($letter).'</h2><ul>';
+        foreach ($letters as $letter => $definitions) {
+            $body .= '<h2><a href="letters/'.strtolower($letter).'.html">'.$letter.'</a></h2><ul>';
+            foreach ($definitions as $definition) {
+                $body .= '<li>'.$definition->getHtmlLink().'</li>';
             }
-            $body .= '<li>'.$definition->getHtmlLink().'</li>';
+            $body .= '</ul>';
         }
-        if ($open) $body .= '</ul>';
 
         $handle = fopen($this->buildFilename('index'), 'w');
         fwrite($handle, $this->render('index', $title, $body, $tags));
+        fclose($handle);
+    }
+
+    /**
+     * Write the home site.
+     *
+     * @param Glossary $glossary
+     * @param string $letter
+     * @param Definition[] $definitions
+     */
+    private function writeLetter(Glossary $glossary, string $letter, array $definitions) {
+        $body = '<ul>';
+        foreach ($definitions as $definition) {
+            $body .= '<li>'.$definition->getHtmlLink().'</li>';
+        }
+        $body .= '</ul>';
+
+        if (!is_dir($this->directory.'/letters')) {
+            mkdir($this->directory.'/letters', 0777, true);
+        }
+        $handle = fopen($this->buildFilename('letters/'.strtolower($letter)), 'w');
+        fwrite($handle, $this->render('letter', $letter, $body, $glossary->getTags()));
         fclose($handle);
     }
 
@@ -214,44 +233,6 @@ class WebsiteGenerator extends AbstractGenerator
         $handle = fopen($this->buildFilename('Tags'), 'w');
         fwrite($handle, $this->render('tags', $title, $body, $tags));
         fclose($handle);
-    }
-
-    /**
-     * Writes a sidebar.
-     *
-     * @param string[] $tags
-     */
-    private function writeSidebar(array $tags) {
-        $handle = fopen($this->buildFilename('_Sidebar'), 'w');
-        fwrite($handle, '[**Overview**](Home)');
-        $this->nl($handle);
-        fwrite($handle, '[**Tags**](Tags)');
-        $this->nl($handle);
-        foreach ($tags as $tag) {
-            fwrite($handle, "* [#$tag]($tag)\n");
-        }
-
-        fclose($handle);
-    }
-
-    /**
-     * Copies all images to the wiki.
-     */
-    private function emptyImages(): void {
-        $dir = $this->directory.'/img/';
-        if (!is_dir($dir)) {
-            return;
-        }
-
-        $imageDir = opendir($dir);
-        while (false !== ($entry = readdir($imageDir))) {
-            if ('.' === $entry[0]) {
-                continue;
-            }
-
-            unlink($dir.$entry);
-        }
-        closedir($imageDir);
     }
 
     /**
@@ -293,20 +274,6 @@ class WebsiteGenerator extends AbstractGenerator
         $handle = fopen($this->buildFilename('tags/'.$tagName), 'w');
         fwrite($handle, $this->render('tag', $title, $body, $tags));
         fclose($handle);
-    }
-
-    /**
-     * @param string $string
-     */
-    private function hr(string &$string) {
-        $string .= "<hr/>";
-    }
-
-    /**
-     * @param $handle
-     */
-    private function nl($handle) {
-        fwrite($handle, "\n\n");
     }
 
     /**

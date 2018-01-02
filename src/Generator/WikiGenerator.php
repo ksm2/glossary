@@ -240,25 +240,6 @@ class WikiGenerator extends AbstractGenerator
     }
 
     /**
-     * Copies all images to the wiki.
-     */
-    private function emptyImages(): void
-    {
-        $dir = $this->directory . '/img/';
-        if (!is_dir($dir)) return;
-
-        $imageDir = opendir($dir);
-        while (false !== ($entry = readdir($imageDir))) {
-            if ('.' === $entry[0]) {
-                continue;
-            }
-
-            unlink($dir . $entry);
-        }
-        closedir($imageDir);
-    }
-
-    /**
      * @param string[] $entries
      */
     private function deleteEntries(array $entries)

@@ -34,12 +34,18 @@ abstract class Definition
     private $glossary;
 
     /**
+     * @var string
+     */
+    private $escapedName;
+
+    /**
      * Definition constructor.
      * @param Glossary $glossary
      * @param string $name
      */
     public function __construct(Glossary $glossary, string $name) {
         $this->name = $name;
+        $this->escapedName = self::escape($name);
         $this->tags = [];
         $this->images = [];
         $this->glossary = $glossary;
@@ -139,7 +145,14 @@ abstract class Definition
      * @return string
      */
     public function getEscapedName(): string {
-        return self::escape($this->name);
+        return $this->escapedName;
+    }
+
+    /**
+     * @return string
+     */
+    public function getLetter(): string {
+        return ucfirst(preg_replace('/[^a-z]/', '#', $this->escapedName[0]));
     }
 
     /**

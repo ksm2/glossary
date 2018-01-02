@@ -197,6 +197,33 @@ final class BodyDefinition extends Definition
     }
 
     /**
+     * {@inheritDoc}
+     */
+    public function getHtml(): string {
+        $latexParser = function (Definition $ref, $text) {
+            return sprintf('<a href="%s.html">%s</a>', $ref->getEscapedName(), $text);
+        };
+
+        $body = $this->getParsedBody($latexParser);
+
+        // Format equations.
+        $body = preg_replace_callback(
+            '/\$([^\$]+)\$/',
+            function (array $matches) {
+                $equation = $matches[1];
+
+                return '<img alt="'.$equation.'" src="https://latex.codecogs.com/gif.latex?'.rawurlencode($equation).'">';
+            },
+            $body
+        );
+
+        // Format paragraphs.
+        $body = str_replace('<p/>', '</p><p>', $body);
+
+        return '<p>'.$body.'</p>';
+    }
+
+    /**
      * @param string $text
      * @param int $width
      * @return string

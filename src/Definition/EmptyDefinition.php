@@ -26,6 +26,13 @@ final class EmptyDefinition extends Definition
     /**
      * @return string
      */
+    public function getHtml(): string {
+        return sprintf('<p class="empty">There is no content for %s yet!</p>', $this->getName());
+    }
+
+    /**
+     * @return string
+     */
     public function getLaTeX(): string {
         return '\ding{55}';
     }

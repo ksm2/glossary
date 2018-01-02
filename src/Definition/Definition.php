@@ -155,6 +155,11 @@ abstract class Definition
     /**
      * @return string
      */
+    public abstract function getHtml(): string;
+
+    /**
+     * @return string
+     */
     public abstract function toString(): string;
 
     /**
@@ -162,6 +167,13 @@ abstract class Definition
      */
     public function getMarkdownLink(): string {
         return sprintf('[%s](%s)', $this->name, $this->getEscapedName());
+    }
+
+    /**
+     * @return string
+     */
+    public function getHtmlLink(): string {
+        return sprintf('<a href="%s.html">%s</a>', $this->getEscapedName(), $this->name);
     }
 
     /**

@@ -56,6 +56,13 @@ final class ReferenceDefinition extends Definition
     /**
      * @return string
      */
+    public function getHtml(): string {
+        return sprintf('<p class="reference">See_ %s</p>', $this->getReference()->getMarkdownLink());
+    }
+
+    /**
+     * @return string
+     */
     public function toString(): string {
         return '';
     }
@@ -79,6 +86,13 @@ final class ReferenceDefinition extends Definition
      */
     public function getMarkdownLink(): string {
         return sprintf('[%s](%s)', $this->getName(), $this->getReference()->getEscapedName());
+    }
+
+    /**
+     * @return string
+     */
+    public function getHtmlLink(): string {
+        return sprintf('<a href="%s.html">%s</a>', $this->getReference()->getEscapedName(), $this->getName());
     }
 
     /**

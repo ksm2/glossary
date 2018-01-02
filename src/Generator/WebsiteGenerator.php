@@ -9,15 +9,22 @@ use CornyPhoenix\Component\Glossary\Glossary;
  * @author Konstantin Simon Maria Möllers
  * @package CornyPhoenix\Component\Glossary\Generator
  */
-class WikiGenerator extends AbstractGenerator
+class WebsiteGenerator extends AbstractGenerator
 {
 
     /**
-     * WikiGenerator constructor.
-     * @param string $directory
+     * @var string
      */
-    public function __construct(string $directory) {
-        parent::__construct('md', $directory);
+    protected $templateLocation;
+
+    /**
+     * Wiki constructor.
+     * @param string $directory
+     * @param string $templateLocation
+     */
+    public function __construct(string $directory, string $templateLocation) {
+        parent::__construct('html', $directory);
+        $this->templateLocation = $templateLocation;
     }
 
     /**
@@ -25,8 +32,7 @@ class WikiGenerator extends AbstractGenerator
      *
      * @param Glossary $glossary
      */
-    public function generate(Glossary $glossary)
-    {
+    public function generate(Glossary $glossary) {
         if (!is_dir($this->directory)) {
             mkdir($this->directory, 0777, true);
         }
@@ -44,36 +50,37 @@ class WikiGenerator extends AbstractGenerator
         $this->deleteEntries($abandonedEntries);
 
         // Write the home page.
-        $this->writeHomePage($glossary->getMeta('title'), $glossary->getDefinitions());
+        $this->writeIndexPage($glossary->getMeta('title'), $glossary->getDefinitions(), $glossary->getTags());
 
         // Write aggregated pages.
         $this->writeTagsPage($glossary->getTags());
         $this->writeSidebar($glossary->getTags());
-        $this->writeFooter($glossary->getMeta('author'));
         $this->writeTags($glossary->getTaggedDefinitions());
     }
 
     /**
      * @return array
      */
-    private function readCurrentEntries(): array
-    {
+    private function readCurrentEntries(): array {
         $entries = [];
         $dir = opendir($this->directory);
-        if ($dir === false) return [];
+        if ($dir === false) {
+            return [];
+        }
 
         while (false !== ($entry = readdir($dir))) {
             if ('.' === $entry[0]) {
                 continue;
             }
-            if ('.md' !== substr($entry, -3)) {
+            if ('.html' !== substr($entry, -5)) {
                 continue;
             }
 
-            $entries[substr($entry, 0, -3)] = true;
+            $entries[substr($entry, 0, -5)] = true;
         }
 
         closedir($dir);
+
         return $entries;
     }
 
@@ -82,11 +89,10 @@ class WikiGenerator extends AbstractGenerator
      * @param string[] $entries
      * @return string[]
      */
-    private function writeEntries(Glossary $glossary, array $entries): array
-    {
+    private function writeEntries(Glossary $glossary, array $entries): array {
         // Build a reference map from the current glossary.
         $map = $glossary->buildReferenceMap();
-        
+
         $current = null;
         $next = null;
         foreach ($glossary->getDefinitions() as $definition) {
@@ -103,7 +109,6 @@ class WikiGenerator extends AbstractGenerator
             $next = $definition;
 
             $refs = isset($map[$current->getName()]) ? $map[$current->getName()] : [];
-
             if (isset($entries[$current->getName()])) {
                 unset($entries[$current->getName()]);
             }
@@ -118,46 +123,51 @@ class WikiGenerator extends AbstractGenerator
         return $entries;
     }
 
-    protected function buildEntry(Glossary $glossary, array $refs, Definition $def, Definition $prev = null, Definition $next = null): string {
-        $body = '# ' . $def->getName();
-        $body .= "\n";
+    protected function buildEntry(
+        Glossary $glossary,
+        array $refs,
+        Definition $def,
+        Definition $prev = null,
+        Definition $next = null
+    ): string {
+        $body = $def->getHtml();
 
         if (count($def->getTags())) {
-            $body .= "> tagged with: ";
+            $body .= "<h2>Tagged with</h2><ul><li>";
             $implode = implode(
-                ', ',
+                '</li><li>',
                 array_map(
                     function ($tag) {
-                        return "[#$tag]($tag)";
+                        return "<a class='tag' href='tags/$tag.html'>#$tag</a>";
                     },
                     $def->getTags()
                 )
             );
-            $body .= "$implode\n";
+            $body .= "$implode</li></ul>";
         }
-
-        $body .= "\n";
-        $body .= $def->getMarkdown();
-        $body .= "\n\n";
 
         foreach ($def->getImages() as $image) {
             $body .= sprintf('![%s](img/%s)', basename($image, '.png'), basename($image));
-            $body .= "\n\n";
+            $this->nl($body);
         }
 
-        $body .= "\n\n***\n\n";
-        $body .= "* [Go to Overview](Home)\n";
-        foreach ($refs as $ref) {
-            $body .= sprintf("* See also %s\n", $ref->getMarkdownLink());
+        if (!empty($refs)) {
+            $body .= '<h2>See also</h2><ul>';
+            foreach ($refs as $ref) {
+                $body .= sprintf("<li>%s</li>", $ref->getHtmlLink());
+            }
+            $body .= '</ul>';
         }
+
+        $this->hr($body);
         if ($prev) {
-            $body .= sprintf("* Previous: %s\n", $prev->getMarkdownLink());
+            $body .= sprintf("<a class='btn prev' href='%s.html'>%s</a>", $prev->getEscapedName(), $prev->getName());
         }
         if ($next) {
-            $body .= sprintf("* Next: %s\n", $next->getMarkdownLink());
+            $body .= sprintf("<a class='btn next' href='%s.html'>%s</a>", $next->getEscapedName(), $next->getName());
         }
 
-        return $body;
+        return $this->render('entry', $def->getName(), $body, $glossary->getTags());
     }
 
     /**
@@ -165,27 +175,26 @@ class WikiGenerator extends AbstractGenerator
      *
      * @param string $title
      * @param Definition[] $definitions
+     * @param string[] $tags
      */
-    private function writeHomePage(string $title, array $definitions)
-    {
-        $handle = fopen($this->buildFilename('Home'), 'w');
-        fwrite($handle, '# '.$title);
-        $this->nl($handle);
-
+    private function writeIndexPage(string $title, array $definitions, array $tags) {
         $letter = null;
+        $open = false;
+        $body = '';
         foreach ($definitions as $definition) {
-            if ($definition->isEmpty()) {
-                continue;
-            }
-
             $thisLetter = preg_replace('/[^a-z]/', '#', $definition->getEscapedName()[0]);
             if ($letter !== $thisLetter) {
                 $letter = $thisLetter;
-                $this->hr($handle);
+                if ($open) $body .= '</ul>';
+                $open = true;
+                $body .= '<h2>'.strtoupper($letter).'</h2><ul>';
             }
-            fwrite($handle, '* ' . $definition->getMarkdownLink() . "\n");
+            $body .= '<li>'.$definition->getHtmlLink().'</li>';
         }
-        $this->hr($handle);
+        if ($open) $body .= '</ul>';
+
+        $handle = fopen($this->buildFilename('index'), 'w');
+        fwrite($handle, $this->render('index', $title, $body, $tags));
         fclose($handle);
     }
 
@@ -194,15 +203,16 @@ class WikiGenerator extends AbstractGenerator
      *
      * @param string[] $tags
      */
-    private function writeTagsPage(array $tags)
-    {
-        $handle = fopen($this->buildFilename('Tags'), 'w');
-        fwrite($handle, '# Tags');
-        $this->nl($handle);
+    private function writeTagsPage(array $tags) {
+        $title = 'Tags';
+        $body = '<ul>';
         foreach ($tags as $tag) {
-            fwrite($handle, "* [#$tag]($tag)\n");
+            $body .= "<li><a href='tags/$tag.html'>#$tag</a></li>";
         }
+        $body .= '</ul>';
 
+        $handle = fopen($this->buildFilename('Tags'), 'w');
+        fwrite($handle, $this->render('tags', $title, $body, $tags));
         fclose($handle);
     }
 
@@ -211,8 +221,7 @@ class WikiGenerator extends AbstractGenerator
      *
      * @param string[] $tags
      */
-    private function writeSidebar(array $tags)
-    {
+    private function writeSidebar(array $tags) {
         $handle = fopen($this->buildFilename('_Sidebar'), 'w');
         fwrite($handle, '[**Overview**](Home)');
         $this->nl($handle);
@@ -226,26 +235,13 @@ class WikiGenerator extends AbstractGenerator
     }
 
     /**
-     * Writes a sidebar.
-     * @param string $author
-     */
-    private function writeFooter(string $author)
-    {
-        $handle = fopen($this->buildFilename('_Footer'), 'w');
-        fwrite($handle, '*Last updated at ' . date('Y-m-d H:i:s') . '*');
-        $this->nl($handle);
-        fwrite($handle, '*Author:* ' . $author);
-
-        fclose($handle);
-    }
-
-    /**
      * Copies all images to the wiki.
      */
-    private function emptyImages(): void
-    {
-        $dir = $this->directory . '/img/';
-        if (!is_dir($dir)) return;
+    private function emptyImages(): void {
+        $dir = $this->directory.'/img/';
+        if (!is_dir($dir)) {
+            return;
+        }
 
         $imageDir = opendir($dir);
         while (false !== ($entry = readdir($imageDir))) {
@@ -253,7 +249,7 @@ class WikiGenerator extends AbstractGenerator
                 continue;
             }
 
-            unlink($dir . $entry);
+            unlink($dir.$entry);
         }
         closedir($imageDir);
     }
@@ -261,10 +257,9 @@ class WikiGenerator extends AbstractGenerator
     /**
      * @param string[] $entries
      */
-    private function deleteEntries(array $entries)
-    {
+    private function deleteEntries(array $entries) {
         foreach (array_keys($entries) as $entry) {
-            unlink($this->directory . '/' . $entry . '.md');
+            unlink($this->directory.'/'.$entry.'.md');
         }
     }
 
@@ -272,48 +267,62 @@ class WikiGenerator extends AbstractGenerator
      * Writes sites for each tag.
      * @param Definition[][] $taggedDefinitions
      */
-    private function writeTags(array $taggedDefinitions)
-    {
+    private function writeTags(array $taggedDefinitions) {
         foreach ($taggedDefinitions as $tag => $definitions) {
-            $this->writeTag($tag, $definitions);
+            $this->writeTag($tag, $definitions, array_keys($taggedDefinitions));
         }
     }
 
     /**
      * @param string $tagName
      * @param Definition[] $definitions
+     * @param string[] $tags
      */
-    private function writeTag(string $tagName, array $definitions)
-    {
-        if (!is_dir($this->directory . '/tags'))
-            mkdir($this->directory . '/tags', 0777, true);
-
-        $handle = fopen($this->directory . '/tags/' . $tagName . '.md', 'w');
-        if (!is_resource($handle)) throw new \RuntimeException('Cannot create tag');
-
-        fwrite($handle, '# Tag #' . $tagName);
-        $this->nl($handle);
+    private function writeTag(string $tagName, array $definitions, array $tags) {
+        $title = 'Tag #'.$tagName;
+        $body = '<ul>';
         foreach ($definitions as $definition) {
-            fwrite($handle, '* ' . $definition->getMarkdownLink() . "\n");
+            $body .= '<li>'.$definition->getHtmlLink().'</li>';
         }
-        $this->hr($handle);
-        fwrite($handle, "* [Go to Overview](Home)\n");
+        $body .= '</ul>';
+
+        // Write out tag
+        if (!is_dir($this->directory.'/tags')) {
+            mkdir($this->directory.'/tags', 0777, true);
+        }
+        $handle = fopen($this->buildFilename('tags/'.$tagName), 'w');
+        fwrite($handle, $this->render('tag', $title, $body, $tags));
         fclose($handle);
     }
 
     /**
-     * @param $handle
+     * @param string $string
      */
-    private function hr($handle)
-    {
-        fwrite($handle, "\n\n***\n\n");
+    private function hr(string &$string) {
+        $string .= "<hr/>";
     }
 
     /**
      * @param $handle
      */
-    private function nl($handle)
-    {
+    private function nl($handle) {
         fwrite($handle, "\n\n");
+    }
+
+    /**
+     * Renders a template with content.
+     *
+     * @param string $title
+     * @param string $body
+     * @param string[] $tags
+     * @return string
+     */
+    private function render(string $class, string $title, string $body, array $tags): string {
+        ob_start();
+        include $this->templateLocation;
+        $content = ob_get_contents();
+        ob_end_clean();
+
+        return $content;
     }
 }

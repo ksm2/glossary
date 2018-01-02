@@ -1,0 +1,22 @@
+{
+    "name": "corny-phoenix/glossary",
+    "version": "1.0.0-dev",
+    "description": "A PHP Component for the Creation of Glossaries in HTML, LaTeX, Markdown, etc.",
+    "license": "MIT",
+    "bin": [
+        "bin/glossary"
+    ],
+    "authors": [
+        {
+            "name": "Konstantin Simon Maria Möllers",
+            "email": "ksm.moellers@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": { "CornyPhoenix\\Component\\Glossary\\": "src/" }
+    },
+    "require": {
+        "php": "^7.2",
+        "symfony/console": "^4.0"
+    }
+}

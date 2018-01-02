@@ -57,8 +57,8 @@ class WebsiteGenerator extends AbstractGenerator
         }
 
         // Write aggregated pages.
-        $this->writeTagsPage($glossary->getTags());
-        $this->writeTags($glossary->getTaggedDefinitions());
+        $this->writeTagsPage($glossary);
+        $this->writeTags($glossary);
     }
 
     /**
@@ -161,7 +161,6 @@ class WebsiteGenerator extends AbstractGenerator
             $body .= '</ul>';
         }
 
-        $this->hr($body);
         if ($prev) {
             $body .= sprintf("<a class='btn prev' href='%s.html'>%s</a>", $prev->getEscapedName(), $prev->getName());
         }
@@ -169,7 +168,12 @@ class WebsiteGenerator extends AbstractGenerator
             $body .= sprintf("<a class='btn next' href='%s.html'>%s</a>", $next->getEscapedName(), $next->getName());
         }
 
-        return $this->render('entry', $def->getName(), $body, $glossary->getTags());
+        $breadcrumbs = [
+            "index.html" => $glossary->getMeta('title'),
+            'letters/'.strtolower($def->getLetter()).'.html' => $def->getLetter(),
+            $def->getEscapedName().'.html' => $def->getName(),
+        ];
+        return $this->render('entry', $def->getName(), $body, $glossary->getTags(), $breadcrumbs);
     }
 
     /**
@@ -182,6 +186,7 @@ class WebsiteGenerator extends AbstractGenerator
     private function writeIndexPage(string $title, array $letters, array $tags) {
         $letter = null;
         $body = '';
+        $breadcrumbs = ['index.html' => $title];
         foreach ($letters as $letter => $definitions) {
             $body .= '<h2><a href="letters/'.strtolower($letter).'.html">'.$letter.'</a></h2><ul>';
             foreach ($definitions as $definition) {
@@ -191,7 +196,7 @@ class WebsiteGenerator extends AbstractGenerator
         }
 
         $handle = fopen($this->buildFilename('index'), 'w');
-        fwrite($handle, $this->render('index', $title, $body, $tags));
+        fwrite($handle, $this->render('index', $title, $body, $tags, $breadcrumbs));
         fclose($handle);
     }
 
@@ -203,6 +208,8 @@ class WebsiteGenerator extends AbstractGenerator
      * @param Definition[] $definitions
      */
     private function writeLetter(Glossary $glossary, string $letter, array $definitions) {
+        $filename = 'letters/'.strtolower($letter);
+        $breadcrumbs = ['index.html' => $glossary->getMeta('title'), $filename.'.html' => $letter];
         $body = '<ul>';
         foreach ($definitions as $definition) {
             $body .= '<li>'.$definition->getHtmlLink().'</li>';
@@ -212,17 +219,22 @@ class WebsiteGenerator extends AbstractGenerator
         if (!is_dir($this->directory.'/letters')) {
             mkdir($this->directory.'/letters', 0777, true);
         }
-        $handle = fopen($this->buildFilename('letters/'.strtolower($letter)), 'w');
-        fwrite($handle, $this->render('letter', $letter, $body, $glossary->getTags()));
+        $handle = fopen($this->buildFilename($filename), 'w');
+        fwrite($handle, $this->render('letter', $letter, $body, $glossary->getTags(), $breadcrumbs));
         fclose($handle);
     }
 
     /**
      * Writes a tag overview page.
      *
-     * @param string[] $tags
+     * @param Glossary $glossary
      */
-    private function writeTagsPage(array $tags) {
+    private function writeTagsPage(Glossary $glossary) {
+        $breadcrumbs = [
+            'index.html' => $glossary->getMeta('title'),
+            'Tags.html' => 'Tags',
+        ];
+        $tags = $glossary->getTags();
         $title = 'Tags';
         $body = '<ul>';
         foreach ($tags as $tag) {
@@ -231,7 +243,7 @@ class WebsiteGenerator extends AbstractGenerator
         $body .= '</ul>';
 
         $handle = fopen($this->buildFilename('Tags'), 'w');
-        fwrite($handle, $this->render('tags', $title, $body, $tags));
+        fwrite($handle, $this->render('tags', $title, $body, $tags, $breadcrumbs));
         fclose($handle);
     }
 
@@ -246,20 +258,27 @@ class WebsiteGenerator extends AbstractGenerator
 
     /**
      * Writes sites for each tag.
-     * @param Definition[][] $taggedDefinitions
+     * @param Glossary $glossary
      */
-    private function writeTags(array $taggedDefinitions) {
+    private function writeTags(Glossary $glossary) {
+        $taggedDefinitions = $glossary->getTaggedDefinitions();
         foreach ($taggedDefinitions as $tag => $definitions) {
-            $this->writeTag($tag, $definitions, array_keys($taggedDefinitions));
+            $this->writeTag($glossary, $tag, $definitions);
         }
     }
 
     /**
+     * @param Glossary $glossary
      * @param string $tagName
      * @param Definition[] $definitions
-     * @param string[] $tags
      */
-    private function writeTag(string $tagName, array $definitions, array $tags) {
+    private function writeTag(Glossary $glossary, string $tagName, array $definitions) {
+        $filename = 'tags/'.$tagName;
+        $breadcrumbs = [
+            'index.html' => $glossary->getMeta('title'),
+            'Tags.html' => 'Tags',
+            $filename.'.html' => '#'.$tagName,
+        ];
         $title = 'Tag #'.$tagName;
         $body = '<ul>';
         foreach ($definitions as $definition) {
@@ -271,20 +290,22 @@ class WebsiteGenerator extends AbstractGenerator
         if (!is_dir($this->directory.'/tags')) {
             mkdir($this->directory.'/tags', 0777, true);
         }
-        $handle = fopen($this->buildFilename('tags/'.$tagName), 'w');
-        fwrite($handle, $this->render('tag', $title, $body, $tags));
+        $handle = fopen($this->buildFilename($filename), 'w');
+        fwrite($handle, $this->render('tag', $title, $body, $glossary->getTags(), $breadcrumbs));
         fclose($handle);
     }
 
     /**
      * Renders a template with content.
      *
+     * @param string $class
      * @param string $title
      * @param string $body
      * @param string[] $tags
+     * @param string[] $breadcrumbs
      * @return string
      */
-    private function render(string $class, string $title, string $body, array $tags): string {
+    private function render(string $class, string $title, string $body, array $tags, array $breadcrumbs): string {
         ob_start();
         include $this->templateLocation;
         $content = ob_get_contents();

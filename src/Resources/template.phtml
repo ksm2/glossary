@@ -11,6 +11,7 @@
     :root {
       --primary: #007377;
       --gray: #dddddd;
+      --light-gray: #ededed;
     }
     * { margin: 0; padding: 0; }
     body {
@@ -38,14 +39,25 @@
     .prev { float: left; }
     .next::after { content: ' >' }
     .prev::before { content: '< ' }
-    .clear { clear: both; }
+    .clear { clear: both; margin-bottom: 1rem; }
+    .breadcrumbs { background: var(--light-gray); padding: 1rem; }
   </style>
 </head>
 <body class="<?php echo $class; ?>">
 <main>
 <h1><?php echo $title; ?></h1>
 <?php echo $body; ?>
-<div class="clear">
+<div class="clear"></div>
+<div class="breadcrumbs">
+<?php $first = true; ?>
+<?php foreach ($breadcrumbs as $link => $label): ?>
+<?php if (!$first): ?>
+<span class="separator">&gt;</span>
+<?php endif; ?>
+<a href="<?php echo $link; ?>"><?php echo $label; ?></a>
+<?php $first = false; ?>
+<?php endforeach; ?>
+</div>
 </main>
 <aside>
 <h3>Go To</h3>
